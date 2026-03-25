@@ -48,10 +48,10 @@ docker compose up -d --build
 
 실행되는 서비스:
 
-- `jarvis-core`: `8000`
-- `jarvis-controller`: `8001`
-- `jarvis-gateway`: `8002`
-- `jarvis-ai-workbench`: `8010`
+- `jarvis-core`: `3010`
+- `jarvis-controller`: `3011`
+- `jarvis-gateway`: `3012`
+- `jarvis-ai-workbench`: `3013`
 
 로그 확인:
 
@@ -99,10 +99,10 @@ GITHUB_BASE=https://github.com/your-org ./deploy_remote_services.sh
 ## 헬스체크
 
 ```bash
-curl http://localhost:8000/health
-curl http://localhost:8001/health
-curl http://localhost:8002/health
-curl http://localhost:8010/health
+curl http://localhost:3010/health
+curl http://localhost:3011/health
+curl http://localhost:3012/health
+curl http://localhost:3013/health
 ```
 
 ## 참고

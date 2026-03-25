@@ -11,7 +11,7 @@ services:
     environment:
       JARVIS_CORE_DB: /app/data/jarvis_core.db
     ports:
-      - "${JARVIS_CORE_PORT:-8000}:8000"
+      - "${JARVIS_CORE_PORT:-3010}:8000"
     volumes:
       - jarvis_core_data:/app/data
     healthcheck:
@@ -29,7 +29,7 @@ services:
     container_name: jarvis-controller
     restart: unless-stopped
     ports:
-      - "${JARVIS_CONTROLLER_PORT:-8001}:8001"
+      - "${JARVIS_CONTROLLER_PORT:-3011}:8001"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health')"]
       interval: 30s
@@ -49,7 +49,7 @@ services:
       JARVIS_GATEWAY_RATE_LIMIT: "${JARVIS_GATEWAY_RATE_LIMIT:-60}"
       JARVIS_GATEWAY_RATE_WINDOW: "${JARVIS_GATEWAY_RATE_WINDOW:-60}"
     ports:
-      - "${JARVIS_GATEWAY_PORT:-8002}:8002"
+      - "${JARVIS_GATEWAY_PORT:-3012}:8002"
     volumes:
       - jarvis_gateway_data:/app/data
     healthcheck:
@@ -67,7 +67,7 @@ services:
     container_name: jarvis-ai-workbench
     restart: unless-stopped
     ports:
-      - "${JARVIS_AI_WORKBENCH_PORT:-8010}:8010"
+      - "${JARVIS_AI_WORKBENCH_PORT:-3013}:8010"
     volumes:
       - ./jarvis-ai-workbench/config:/app/jarvis-ai-workbench/config
     healthcheck:

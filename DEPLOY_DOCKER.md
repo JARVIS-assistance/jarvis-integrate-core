@@ -2,10 +2,10 @@
 
 이 저장소는 `docker compose` 기준으로 다음 4개 서비스를 함께 올릴 수 있습니다.
 
-- `jarvis-core` on `8000`
-- `jarvis-controller` on `8001`
-- `jarvis-gateway` on `8002`
-- `jarvis-ai-workbench` on `8010`
+- `jarvis-core` on `3010`
+- `jarvis-controller` on `3011`
+- `jarvis-gateway` on `3012`
+- `jarvis-ai-workbench` on `3013`
 
 ## 1. 환경변수 준비
 
@@ -62,10 +62,10 @@ docker compose down -v
 ## 3. 헬스체크
 
 ```bash
-curl http://localhost:8000/health
-curl http://localhost:8001/health
-curl http://localhost:8002/health
-curl http://localhost:8010/health
+curl http://localhost:3010/health
+curl http://localhost:3011/health
+curl http://localhost:3012/health
+curl http://localhost:3013/health
 ```
 
 ## 4. 데이터 저장 위치
