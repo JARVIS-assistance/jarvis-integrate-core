@@ -76,5 +76,5 @@ curl http://localhost:3013/health
 
 ## 5. 참고
 
-- 이미지에는 로컬 `jarvis-core/.env`를 포함하지 않도록 `.dockerignore`에 제외 처리했습니다.
-- `jarvis-controller`, `jarvis-gateway`, `jarvis-core`는 공용 로컬 패키지 `jarvis-contracts`를 함께 복사해 빌드합니다.
+- 이미지에는 로컬 `jarvis_core/.env`를 포함하지 않도록 `.dockerignore`에 제외 처리했습니다.
+- `jarvis-controller`, `jarvis-gateway`, `jarvis-core`는 공용 로컬 패키지 `jarvis_contracts`를 함께 복사해 빌드합니다.
