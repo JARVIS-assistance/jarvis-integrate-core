@@ -1,0 +1,173 @@
+from __future__ import annotations
+
+from fastapi import FastAPI, Header, HTTPException, status
+from fastapi.responses import StreamingResponse
+from jarvis_contracts import (
+    InternalConversationRequest,
+    InternalConversationResponse,
+    JarvisCoreEndpoints,
+)
+
+from ai import AIService
+from ai.client import StubAIClient
+from application.chat.schemas import (
+    ChatOnceRequest,
+    ChatOnceResponse,
+    ModelConfigResponse,
+    ModelConfigUpsertRequest,
+    ModelSelectionResponse,
+    ModelSelectionUpsertRequest,
+)
+from application.chat.service import ChatService
+from core.db.db_connection import DBClient, connect
+from core.db.db_schema import init_db
+from jarvis_core import available_modes, run_deep_thinking, run_realtime_conversation
+from middleware import RequestIDMiddleware
+
+
+def _get_chat_service(app: FastAPI) -> ChatService:
+    return ChatService(db=app.state.db, ai_service=app.state.ai_service)
+
+
+def create_app(db: DBClient | None = None, ai_service: AIService | None = None) -> FastAPI:
+    app = FastAPI(title="jarvis-core", version="0.3.0")
+    app.add_middleware(RequestIDMiddleware)
+
+    @app.on_event("startup")
+    def startup() -> None:
+        if not hasattr(app.state, "db") or app.state.db is None:
+            app.state.db = db or connect()
+            init_db(app.state.db)
+        if not hasattr(app.state, "ai_service") or app.state.ai_service is None:
+            app.state.ai_service = ai_service or AIService(default_client=StubAIClient())
+
+    @app.on_event("shutdown")
+    def shutdown() -> None:
+        db_client: DBClient | None = getattr(app.state, "db", None)
+        if db_client is not None:
+            db_client.conn.close()
+
+    # ── health ──────────────────────────────────────────────
+
+    @app.get(JarvisCoreEndpoints.HEALTH.path)
+    def health() -> dict[str, object]:
+        return {
+            "status": "ok",
+            "service": "jarvis-core",
+            "mode": "library-first",
+            "capabilities": list(available_modes()),
+        }
+
+    # ── internal: conversation (기존) ───────────────────────
+
+    @app.post(
+        JarvisCoreEndpoints.INTERNAL_CONVERSATION_RESPOND.path,
+        response_model=InternalConversationResponse,
+    )
+    def respond(body: InternalConversationRequest) -> InternalConversationResponse:
+        result = (
+            run_deep_thinking(body.message)
+            if body.mode == "deep"
+            else run_realtime_conversation(body.message)
+        )
+        return InternalConversationResponse(
+            mode=result.mode,
+            summary=result.summary,
+            content=result.content,
+            next_actions=result.next_actions,
+        )
+
+    # ── internal: chat ──────────────────────────────────────
+
+    @app.post("/internal/chat/request", response_model=ChatOnceResponse)
+    async def chat_request(
+        body: ChatOnceRequest,
+        x_user_id: str = Header(...),
+        x_user_email: str = Header(default=""),
+        x_request_id: str = Header(default=""),
+    ) -> ChatOnceResponse:
+        service = _get_chat_service(app)
+        result = await service.request_once(
+            body=body,
+            request_id=x_request_id,
+            user_id=x_user_id,
+            email=x_user_email,
+        )
+        from jarvis_contracts import ErrorResponse
+
+        if isinstance(result, ErrorResponse):
+            return ChatOnceResponse(
+                request_id=result.request_id or x_request_id,
+                route="blocked",
+                provider_mode="local",
+                provider_name="safety",
+                model_name="none",
+                content=result.message or "blocked",
+            )
+        return ChatOnceResponse(**result)
+
+    @app.post("/internal/chat/stream")
+    async def chat_stream(
+        body: ChatOnceRequest,
+        x_user_id: str = Header(...),
+        x_user_email: str = Header(default=""),
+        x_request_id: str = Header(default=""),
+    ) -> StreamingResponse:
+        service = _get_chat_service(app)
+        return StreamingResponse(
+            service.run_realtime_sse(
+                message=body.message,
+                task_type=body.task_type,
+                confirm=body.confirm,
+                request_id=x_request_id,
+                user_id=x_user_id,
+                email=x_user_email,
+            ),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    # ── internal: model config ──────────────────────────────
+
+    @app.post("/internal/chat/model-config", response_model=ModelConfigResponse)
+    def create_model_config(
+        body: ModelConfigUpsertRequest,
+        x_user_id: str = Header(...),
+    ) -> ModelConfigResponse:
+        service = _get_chat_service(app)
+        result = service.create_model_config(user_id=x_user_id, body=body)
+        return ModelConfigResponse(**result)
+
+    @app.get("/internal/chat/model-config", response_model=list[ModelConfigResponse])
+    def list_model_configs(
+        x_user_id: str = Header(...),
+    ) -> list[ModelConfigResponse]:
+        service = _get_chat_service(app)
+        result = service.list_model_configs(user_id=x_user_id)
+        return [ModelConfigResponse(**item) for item in result]
+
+    @app.post("/internal/chat/model-selection", response_model=ModelSelectionResponse)
+    def set_model_selection(
+        body: ModelSelectionUpsertRequest,
+        x_user_id: str = Header(...),
+    ) -> ModelSelectionResponse:
+        service = _get_chat_service(app)
+        result = service.set_model_selection(user_id=x_user_id, body=body)
+        return ModelSelectionResponse(**result)
+
+    @app.get("/internal/chat/model-selection", response_model=ModelSelectionResponse)
+    def get_model_selection(
+        x_user_id: str = Header(...),
+    ) -> ModelSelectionResponse:
+        service = _get_chat_service(app)
+        result = service.get_model_selection(user_id=x_user_id)
+        return ModelSelectionResponse(**result)
+
+    return app
+
+
+app = create_app()
