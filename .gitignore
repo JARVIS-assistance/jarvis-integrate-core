@@ -4,3 +4,4 @@ data/
 .env.docker
 *.pyc
 __pycache__/
+CODEX_WORK.md

@@ -28,8 +28,18 @@ services:
       target: controller
     container_name: jarvis-controller
     restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      JARVIS_CORE_URL: http://jarvis-core:8000
+      JARVIS_GATEWAY_URL: http://jarvis-gateway:8002
     ports:
       - "${JARVIS_CONTROLLER_PORT:-3011}:8001"
+    depends_on:
+      jarvis-core:
+        condition: service_healthy
+      jarvis-gateway:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health')"]
       interval: 30s
@@ -44,6 +54,8 @@ services:
       target: gateway
     container_name: jarvis-gateway
     restart: unless-stopped
+    env_file:
+      - .env.docker
     environment:
       JARVIS_GATEWAY_DB: /app/data/jarvis_gateway.db
       JARVIS_GATEWAY_RATE_LIMIT: "${JARVIS_GATEWAY_RATE_LIMIT:-60}"
@@ -66,6 +78,8 @@ services:
       target: ai-workbench
     container_name: jarvis-ai-workbench
     restart: unless-stopped
+    env_file:
+      - .env.docker
     ports:
       - "${JARVIS_AI_WORKBENCH_PORT:-3013}:8010"
     volumes:
