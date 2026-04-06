@@ -9,19 +9,71 @@ else
   PYTHON_BIN="${PYTHON_BIN:-python3.12}"
 fi
 
-# Allow jarvis-core to import shared contracts without editable install.
-export PYTHONPATH="${ROOT_DIR}/jarvis-core/src:${ROOT_DIR}/jarvis-contracts/src:${PYTHONPATH:-}"
+export PYTHONPATH="${ROOT_DIR}:${PYTHONPATH:-}"
 
-ARGS=(
-  --app-dir "${ROOT_DIR}/jarvis-core/src"
-  "${APP_MODULE:-app:app}"
-  --host 0.0.0.0
-  --port "${PORT:-8000}"
-  --env-file "${ROOT_DIR}/jarvis-core/.env"
-)
-
-if [[ "${RELOAD:-0}" == "1" ]]; then
-  ARGS+=(--reload --reload-dir "${ROOT_DIR}/jarvis-core/src")
+RELOAD_FLAG=()
+if [[ "${RELOAD:-1}" == "1" ]]; then
+  RELOAD_FLAG=(--reload)
 fi
 
-exec "${PYTHON_BIN}" -m uvicorn "${ARGS[@]}"
+SERVICE="${1:-all}"
+
+start_core() {
+  echo "▶ Starting jarvis-core on :${JARVIS_CORE_PORT:-8000}"
+  PYTHONPATH="${ROOT_DIR}:${ROOT_DIR}/jarvis_core/src:${PYTHONPATH:-}" \
+  "${PYTHON_BIN}" -m uvicorn app:app \
+    --app-dir "${ROOT_DIR}/jarvis_core/src" \
+    --host 0.0.0.0 \
+    --port "${JARVIS_CORE_PORT:-8000}" \
+    "${RELOAD_FLAG[@]}" &
+}
+
+start_gateway() {
+  echo "▶ Starting jarvis-gateway on :${JARVIS_GATEWAY_PORT:-8002}"
+  PYTHONPATH="${ROOT_DIR}:${ROOT_DIR}/jarvis_gateway/src:${PYTHONPATH:-}" \
+  "${PYTHON_BIN}" -m uvicorn jarvis_gateway.app:app \
+    --app-dir "${ROOT_DIR}/jarvis_gateway/src" \
+    --host 0.0.0.0 \
+    --port "${JARVIS_GATEWAY_PORT:-8002}" \
+    "${RELOAD_FLAG[@]}" &
+}
+
+start_controller() {
+  echo "▶ Starting jarvis-controller on :${JARVIS_CONTROLLER_PORT:-8001}"
+  PYTHONPATH="${ROOT_DIR}:${ROOT_DIR}/jarvis_controller/src:${PYTHONPATH:-}" \
+  JARVIS_CORE_URL="http://localhost:${JARVIS_CORE_PORT:-8000}" \
+  JARVIS_GATEWAY_URL="http://localhost:${JARVIS_GATEWAY_PORT:-8002}" \
+  "${PYTHON_BIN}" -m uvicorn app:app \
+    --app-dir "${ROOT_DIR}/jarvis_controller/src" \
+    --host 0.0.0.0 \
+    --port "${JARVIS_CONTROLLER_PORT:-8001}" \
+    "${RELOAD_FLAG[@]}" &
+}
+
+cleanup() {
+  echo ""
+  echo "Stopping all services..."
+  kill $(jobs -p) 2>/dev/null
+  wait
+}
+trap cleanup EXIT INT TERM
+
+case "${SERVICE}" in
+  core)       start_core ;;
+  gateway)    start_gateway ;;
+  controller) start_controller ;;
+  all)
+    start_core
+    start_gateway
+    sleep 1
+    start_controller
+    ;;
+  *)
+    echo "Usage: $0 [core|gateway|controller|all]"
+    exit 1
+    ;;
+esac
+
+echo ""
+echo "Services running. Press Ctrl+C to stop."
+wait

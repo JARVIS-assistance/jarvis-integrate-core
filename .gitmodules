@@ -1,15 +1,15 @@
-[submodule "jarvis-contracts"]
-	path = jarvis-contracts
+[submodule "jarvis_contracts"]
+	path = jarvis_contracts
 	url = https://github.com/JARVIS-assistance/jarvis-contracts.git
-[submodule "jarvis-gateway"]
-	path = jarvis-gateway
-	url = https://github.com/JARVIS-assistance/jarvis-gateway.git
-[submodule "jarvis-ai-workbench"]
-	path = jarvis-ai-workbench
+[submodule "jarvis_ai_workbench"]
+	path = jarvis_ai_workbench
 	url = https://github.com/JARVIS-assistance/jarvis-ai-workbench.git
-[submodule "jarvis-core"]
-	path = jarvis-core
-	url = https://github.com/JARVIS-assistance/jarvis-core
-[submodule "jarvis-controller"]
-	path = jarvis-controller
-	url = https://github.com/JARVIS-assistance/jarvis-controller
+[submodule "jarvis_core"]
+	path = jarvis_core
+	url = https://github.com/JARVIS-assistance/jarvis-core.git
+[submodule "jarvis_controller"]
+	path = jarvis_controller
+	url = https://github.com/JARVIS-assistance/jarvis_controller
+[submodule "jarvis_gateway"]
+	path = jarvis_gateway
+	url = https://github.com/JARVIS-assistance/jarvis_gateway
