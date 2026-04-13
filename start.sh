@@ -68,6 +68,17 @@ start_controller() {
     ${RELOAD_FLAG:+$RELOAD_FLAG} &
 }
 
+start_workbench() {
+  require_service_source "${ROOT_DIR}/jarvis_ai_workbench/src/jarvis_ai_workbench" "app.py"
+  echo "▶ Starting jarvis-ai-workbench on :${JARVIS_WORKBENCH_PORT:-8010}"
+  PYTHONPATH="${ROOT_DIR}:${ROOT_DIR}/jarvis_ai_workbench/src:${PYTHONPATH:-}" \
+  "${PYTHON_BIN}" -m uvicorn jarvis_ai_workbench.app:app \
+    --app-dir "${ROOT_DIR}/jarvis_ai_workbench/src" \
+    --host 0.0.0.0 \
+    --port "${JARVIS_WORKBENCH_PORT:-8010}" \
+    ${RELOAD_FLAG:+$RELOAD_FLAG} &
+}
+
 cleanup() {
   echo ""
   echo "Stopping all services..."
@@ -80,14 +91,16 @@ case "${SERVICE}" in
   core)       start_core ;;
   gateway)    start_gateway ;;
   controller) start_controller ;;
+  workbench)  start_workbench ;;
   all)
     start_core
     start_gateway
     sleep 1
     start_controller
+    start_workbench
     ;;
   *)
-    echo "Usage: $0 [core|gateway|controller|all]"
+    echo "Usage: $0 [core|gateway|controller|workbench|all]"
     exit 1
     ;;
 esac
