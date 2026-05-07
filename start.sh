@@ -2,6 +2,14 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ "${JARVIS_LOAD_ENV:-1}" == "1" && -f "${ROOT_DIR}/.env" ]]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "${ROOT_DIR}/.env"
+  set +a
+fi
+
 DEFAULT_PYTHON="${ROOT_DIR}/.venv/bin/python"
 if [[ -x "${DEFAULT_PYTHON}" ]]; then
   PYTHON_BIN="${PYTHON_BIN:-${DEFAULT_PYTHON}}"
