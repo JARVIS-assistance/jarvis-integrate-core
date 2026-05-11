@@ -133,3 +133,12 @@ order by mc.updated_at desc nulls last;
 - Create a model config through controller `POST /chat/model-config`.
 - Verify the inserted row in the same PostgreSQL target shown in startup logs.
 - Then use `PUT /chat/model-config/{id}` to confirm update behavior.
+
+## Model Selection Bug Fix (Task 3)
+
+- Runtime evidence from `jarvis-core` Docker logs showed core chat requests selecting `gemma4:e2b` for realtime after ignoring selected `gemma4:e4b` because `supports_realtime=false`.
+- Runtime evidence from `jarvis-controller` Docker logs showed separate action compiler requests using `docker.io/ai/gemma4:E4B`; these are not the core chat response model-selection path.
+- PostgreSQL state (`breakpack@host.docker.internal:3015/jarvis`) showed `user_ai_model_selection.realtime_model_config_id` pointed at the default `gemma4:e4b` row even though that row had `supports_stream=false` and `supports_realtime=false`; the realtime-capable `gemma4:e2b` row existed separately.
+- Root cause fixed in `jarvis_core/src/application/chat/service.py`: creating/updating an `is_default=true` config no longer blindly overwrites existing realtime/deep selections. Realtime selection is only auto-populated from a default config when it supports realtime and no realtime lane is already selected; deep selection is only auto-populated when no deep lane is selected.
+- `POST /internal/chat/model-selection` now preserves omitted lanes as partial updates and rejects a `realtime_model_config_id` that does not reference a realtime-capable model.
+- Regression coverage was added in `jarvis_core/tests/test_app.py` for default create/update preserving selected realtime config, partial lane update preservation, and invalid realtime-lane selection rejection.
