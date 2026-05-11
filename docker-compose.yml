@@ -83,7 +83,7 @@ services:
     ports:
       - "${JARVIS_AI_WORKBENCH_PORT:-3013}:8010"
     volumes:
-      - ./jarvis-ai-workbench/config:/app/jarvis-ai-workbench/config
+      - ./jarvis_ai_workbench/config:/app/jarvis_ai_workbench/config
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health')"]
       interval: 30s

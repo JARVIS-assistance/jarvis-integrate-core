@@ -18,5 +18,5 @@ jarvis_gateway/.pytest_cache/
 jarvis_gateway/.ruff_cache/
 jarvis_controller/.pytest_cache/
 jarvis_controller/.ruff_cache/
-jarvis-ai-workbench/.pytest_cache/
-jarvis-ai-workbench/.ruff_cache/
+jarvis_ai_workbench/.pytest_cache/
+jarvis_ai_workbench/.ruff_cache/

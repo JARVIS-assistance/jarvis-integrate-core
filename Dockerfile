@@ -16,7 +16,7 @@ COPY jarvis_contracts /app/jarvis_contracts
 COPY jarvis_core /app/jarvis_core
 COPY jarvis_controller /app/jarvis_controller
 COPY jarvis_gateway /app/jarvis_gateway
-COPY jarvis-ai-workbench /app/jarvis-ai-workbench
+COPY jarvis_ai_workbench /app/jarvis_ai_workbench
 
 RUN ln -s /app/jarvis_contracts /app/jarvis-contracts \
     && ln -s /app/jarvis_core /app/jarvis-core \
@@ -48,8 +48,8 @@ ENV PYTHONPATH=/app:/app/jarvis_contracts:/app/jarvis_gateway/src
 CMD ["python", "-m", "uvicorn", "jarvis_gateway.app:app", "--app-dir", "/app/jarvis_gateway/src", "--host", "0.0.0.0", "--port", "8002"]
 
 FROM base AS ai-workbench
-WORKDIR /app/jarvis-ai-workbench
+WORKDIR /app/jarvis_ai_workbench
 RUN python -m pip install --no-build-isolation -r requirements.txt
 WORKDIR /app
-ENV PYTHONPATH=/app/jarvis-ai-workbench/src
-CMD ["python", "-m", "uvicorn", "jarvis_ai_workbench.app:app", "--app-dir", "/app/jarvis-ai-workbench/src", "--host", "0.0.0.0", "--port", "8010"]
+ENV PYTHONPATH=/app/jarvis_ai_workbench/src
+CMD ["python", "-m", "uvicorn", "jarvis_ai_workbench.app:app", "--app-dir", "/app/jarvis_ai_workbench/src", "--host", "0.0.0.0", "--port", "8010"]
