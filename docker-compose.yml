@@ -15,6 +15,15 @@ services:
       JARVIS_CORE_DB_HOST: ${JARVIS_CORE_DB_HOST:-host.docker.internal}
       JARVIS_CORE_DB_PORT: ${JARVIS_CORE_DB_PORT:-3015}
       JARVIS_CORE_DB_NAME: ${JARVIS_CORE_DB_NAME:-jarvis}
+      JARVIS_OLLAMA_KEEP_ALIVE: "24h"
+      JARVIS_OLLAMA_REALTIME_KEEP_ALIVE: "24h"
+      JARVIS_TTS_SERVER_URL: "${JARVIS_TTS_SERVER_URL:-http://jarvis-tts-runtime:8031}"
+      JARVIS_TTS_SERVER_PCM_ENDPOINT: "${JARVIS_TTS_SERVER_PCM_ENDPOINT:-}"
+      JARVIS_LOCAL_TTS_COMMAND: "${JARVIS_LOCAL_TTS_COMMAND:-}"
+      JARVIS_LOCAL_TTS_MODEL: "${JARVIS_LOCAL_TTS_MODEL:-local/espeak-ng}"
+      JARVIS_TTS_SERVER_MODEL: "${JARVIS_TTS_SERVER_MODEL:-melotts/KR}"
+      JARVIS_TTS_MODELS: "${JARVIS_TTS_MODELS:-Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice,melotts/KR,piper/default,Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice,Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign}"
+      JARVIS_TTS_TIMEOUT_SECONDS: "${JARVIS_TTS_TIMEOUT_SECONDS:-300}"
     ports:
       - "${JARVIS_CORE_PORT:-3010}:8000"
     volumes:
@@ -26,6 +35,50 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    depends_on:
+      jarvis-tts-runtime:
+        condition: service_healthy
+
+  jarvis-tts-runtime:
+    build:
+      context: ./jarvis_tts_runtime
+      dockerfile: Dockerfile
+      args:
+        INSTALL_MELOTTS: "${JARVIS_TTS_RUNTIME_INSTALL_MELOTTS:-1}"
+        INSTALL_PIPER_TTS: "${JARVIS_TTS_RUNTIME_INSTALL_PIPER_TTS:-1}"
+    container_name: jarvis-tts-runtime
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      JARVIS_TTS_RUNTIME_DEFAULT_MODEL: "${JARVIS_TTS_RUNTIME_DEFAULT_MODEL:-melotts/KR}"
+      JARVIS_TTS_RUNTIME_MODELS: "${JARVIS_TTS_RUNTIME_MODELS:-Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice,melotts/KR,piper/default,Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice,Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign}"
+      JARVIS_TTS_RUNTIME_PRELOAD_MODELS: "${JARVIS_TTS_RUNTIME_PRELOAD_MODELS:-melotts/KR}"
+      JARVIS_TTS_RUNTIME_MELO_LANGUAGE: "${JARVIS_TTS_RUNTIME_MELO_LANGUAGE:-KR}"
+      JARVIS_TTS_RUNTIME_MELO_DEVICE: "${JARVIS_TTS_RUNTIME_MELO_DEVICE:-cpu}"
+      JARVIS_TTS_RUNTIME_MELO_SPEAKER: "${JARVIS_TTS_RUNTIME_MELO_SPEAKER:-}"
+      JARVIS_TTS_RUNTIME_MELO_SPEED: "${JARVIS_TTS_RUNTIME_MELO_SPEED:-1.0}"
+      JARVIS_TTS_RUNTIME_PIPER_MODEL_PATH: "${JARVIS_TTS_RUNTIME_PIPER_MODEL_PATH:-}"
+      JARVIS_TTS_RUNTIME_DEFAULT_SPEAKER: "${JARVIS_TTS_RUNTIME_DEFAULT_SPEAKER:-Sohee}"
+      JARVIS_TTS_RUNTIME_LANGUAGE: "${JARVIS_TTS_RUNTIME_LANGUAGE:-Korean}"
+      JARVIS_TTS_RUNTIME_DEVICE: "${JARVIS_TTS_RUNTIME_DEVICE:-auto}"
+      JARVIS_TTS_RUNTIME_DTYPE: "${JARVIS_TTS_RUNTIME_DTYPE:-auto}"
+      JARVIS_TTS_RUNTIME_ATTN: "${JARVIS_TTS_RUNTIME_ATTN:-}"
+      JARVIS_TTS_RUNTIME_PRELOAD_MODEL: "${JARVIS_TTS_RUNTIME_PRELOAD_MODEL:-1}"
+      JARVIS_TTS_RUNTIME_PRELOAD_REQUIRED: "${JARVIS_TTS_RUNTIME_PRELOAD_REQUIRED:-1}"
+      MECABRC: /etc/mecabrc
+      HF_HOME: /models/huggingface
+      TRANSFORMERS_CACHE: /models/huggingface
+    ports:
+      - "${JARVIS_TTS_RUNTIME_PORT:-3031}:8031"
+    volumes:
+      - jarvis_tts_models:/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8031/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 300s
 
   jarvis-controller:
     build:
@@ -63,10 +116,15 @@ services:
       JARVIS_ACTION_COMPILER_FALLBACK_ON_INTENT_UNAVAILABLE: "0"
       JARVIS_ACTION_COMPILER_FALLBACK_ON_LOW_CONFIDENCE_NO_ACTION: "0"
       JARVIS_ACTION_COMPILER_FALLBACK_ON_INTENT_TIMEOUT: "0"
-      JARVIS_ACTION_OLLAMA_KEEP_ALIVE: 5m
-      JARVIS_OLLAMA_KEEP_ALIVE: 10m
+      JARVIS_ACTION_OLLAMA_KEEP_ALIVE: "24h"
+      JARVIS_OLLAMA_KEEP_ALIVE: "24h"
+      JARVIS_OLLAMA_PRELOAD_ENABLED: "1"
+      JARVIS_OLLAMA_PRELOAD_ENDPOINT: http://host.docker.internal:3030
+      JARVIS_OLLAMA_PRELOAD_KEEP_ALIVE: "24h"
+      JARVIS_OLLAMA_PRELOAD_MODELS: "${JARVIS_OLLAMA_PRELOAD_MODELS:-gemma4:e2b}"
+      JARVIS_OLLAMA_PRELOAD_INTERVAL_SECONDS: "${JARVIS_OLLAMA_PRELOAD_INTERVAL_SECONDS:-21600}"
       JARVIS_REALTIME_CONTEXT_CACHE_TTL_SECONDS: "20"
-      JARVIS_OLLAMA_REALTIME_KEEP_ALIVE: 15m
+      JARVIS_OLLAMA_REALTIME_KEEP_ALIVE: "24h"
       JARVIS_OLLAMA_REALTIME_STREAM_TOTAL_TIMEOUT: "18"
       JARVIS_OLLAMA_REALTIME_STREAM_CONNECT_TIMEOUT: "5"
       JARVIS_OLLAMA_REALTIME_STREAM_READ_TIMEOUT: "12"
@@ -135,3 +193,4 @@ services:
 volumes:
   jarvis_core_data:
   jarvis_gateway_data:
+  jarvis_tts_models:

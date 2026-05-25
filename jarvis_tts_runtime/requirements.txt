@@ -1,0 +1,6 @@
+fastapi>=0.110
+uvicorn>=0.27
+pydantic>=2.6
+numpy>=1.26
+soundfile>=0.12
+qwen-tts>=0.1.0
