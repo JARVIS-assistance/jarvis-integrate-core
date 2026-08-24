@@ -58,7 +58,8 @@ class LoadedModel:
 
 
 app = FastAPI(title="Jarvis TTS Runtime")
-_model_lock = threading.Lock()
+_model_registry_lock = threading.Lock()
+_model_locks: dict[str, threading.Lock] = {}
 _loaded_model: LoadedModel | None = None
 _loaded_melo_models: dict[str, object] = {}
 _loaded_piper_models: dict[str, object] = {}
@@ -163,13 +164,25 @@ async def synthesize_pcm(request: TTSRequest) -> Response:
     )
 
 
+def _lock_for_model(model_id: str) -> threading.Lock:
+    # ponytail: per-model lock, not per-request queue; add a request-level
+    # semaphore if a single model needs bounded concurrency instead of full
+    # serialization.
+    with _model_registry_lock:
+        return _model_locks.setdefault(model_id, threading.Lock())
+
+
 def _generate_audio(model_id: str, request: TTSRequest) -> tuple[np.ndarray, int]:
     provider = _provider_for_model(model_id)
-    if provider == "melotts":
-        return _generate_melotts_audio(model_id, request)
-    if provider == "piper":
-        return _generate_piper_audio(model_id, request)
+    with _lock_for_model(model_id):
+        if provider == "melotts":
+            return _generate_melotts_audio(model_id, request)
+        if provider == "piper":
+            return _generate_piper_audio(model_id, request)
+        return _generate_qwen_audio(model_id, request)
 
+
+def _generate_qwen_audio(model_id: str, request: TTSRequest) -> tuple[np.ndarray, int]:
     model = _load_model_sync(model_id)
     language = request.language or os.getenv("JARVIS_TTS_RUNTIME_LANGUAGE", DEFAULT_LANGUAGE)
 
@@ -211,13 +224,14 @@ def _generate_audio(model_id: str, request: TTSRequest) -> tuple[np.ndarray, int
 
 def _warm_model_sync(model_id: str) -> None:
     provider = _provider_for_model(model_id)
-    if provider == "melotts":
-        _load_melotts_sync(model_id)
-        return
-    if provider == "piper":
-        _load_piper_sync(model_id)
-        return
-    _load_model_sync(model_id)
+    with _lock_for_model(model_id):
+        if provider == "melotts":
+            _load_melotts_sync(model_id)
+            return
+        if provider == "piper":
+            _load_piper_sync(model_id)
+            return
+        _load_model_sync(model_id)
 
 
 def _generate_melotts_audio(model_id: str, request: TTSRequest) -> tuple[np.ndarray, int]:
@@ -231,22 +245,22 @@ def _generate_melotts_audio(model_id: str, request: TTSRequest) -> tuple[np.ndar
 
 
 def _load_melotts_sync(model_id: str) -> object:
-    with _model_lock:
-        cached = _loaded_melo_models.get(model_id)
-        if cached is not None:
-            return cached
-        try:
-            from melo.api import TTS
-        except ImportError as exc:
-            raise RuntimeError(
-                "MeloTTS dependencies are not installed; install the optional melotts runtime packages"
-            ) from exc
+    # caller (_generate_audio / _warm_model_sync) already holds the per-model lock
+    cached = _loaded_melo_models.get(model_id)
+    if cached is not None:
+        return cached
+    try:
+        from melo.api import TTS
+    except ImportError as exc:
+        raise RuntimeError(
+            "MeloTTS dependencies are not installed; install the optional melotts runtime packages"
+        ) from exc
 
-        language = _melotts_language(model_id)
-        device = os.getenv("JARVIS_TTS_RUNTIME_MELO_DEVICE", "").strip() or _default_melo_device()
-        model = TTS(language=language, device=device)
-        _loaded_melo_models[model_id] = model
-        return model
+    language = _melotts_language(model_id)
+    device = os.getenv("JARVIS_TTS_RUNTIME_MELO_DEVICE", "").strip() or _default_melo_device()
+    model = TTS(language=language, device=device)
+    _loaded_melo_models[model_id] = model
+    return model
 
 
 def _generate_piper_audio(model_id: str, request: TTSRequest) -> tuple[np.ndarray, int]:
@@ -259,48 +273,48 @@ def _generate_piper_audio(model_id: str, request: TTSRequest) -> tuple[np.ndarra
 
 
 def _load_piper_sync(model_id: str) -> object:
-    with _model_lock:
-        cached = _loaded_piper_models.get(model_id)
-        if cached is not None:
-            return cached
-        try:
-            from piper.voice import PiperVoice
-        except ImportError as exc:
-            raise RuntimeError(
-                "Piper dependencies are not installed; install piper-tts or provide a Piper runtime image"
-            ) from exc
+    # caller (_generate_audio / _warm_model_sync) already holds the per-model lock
+    cached = _loaded_piper_models.get(model_id)
+    if cached is not None:
+        return cached
+    try:
+        from piper.voice import PiperVoice
+    except ImportError as exc:
+        raise RuntimeError(
+            "Piper dependencies are not installed; install piper-tts or provide a Piper runtime image"
+        ) from exc
 
-        model_path = _piper_model_path(model_id)
-        voice = PiperVoice.load(model_path)
-        _loaded_piper_models[model_id] = voice
-        return voice
+    model_path = _piper_model_path(model_id)
+    voice = PiperVoice.load(model_path)
+    _loaded_piper_models[model_id] = voice
+    return voice
 
 
 def _load_model_sync(model_id: str) -> object:
+    # caller (_generate_qwen_audio / _warm_model_sync) already holds the per-model lock
     global _loaded_model
-    with _model_lock:
-        if _loaded_model is not None and _loaded_model.model_id == model_id:
-            return _loaded_model.model
-
-        try:
-            import torch
-            from huggingface_hub import snapshot_download
-            from qwen_tts import Qwen3TTSModel
-        except ImportError as exc:
-            raise RuntimeError("qwen-tts runtime dependencies are not installed") from exc
-
-        device_map = _device_map(torch)
-        kwargs: dict[str, object] = {"device_map": device_map}
-        dtype = _torch_dtype(torch, device_map)
-        if dtype is not None:
-            kwargs["dtype"] = dtype
-        attn = os.getenv("JARVIS_TTS_RUNTIME_ATTN", "").strip()
-        if attn:
-            kwargs["attn_implementation"] = attn
-
-        model_path = _prepare_model_path(model_id, snapshot_download)
-        _loaded_model = LoadedModel(model_id=model_id, model=Qwen3TTSModel.from_pretrained(model_path, **kwargs))
+    if _loaded_model is not None and _loaded_model.model_id == model_id:
         return _loaded_model.model
+
+    try:
+        import torch
+        from huggingface_hub import snapshot_download
+        from qwen_tts import Qwen3TTSModel
+    except ImportError as exc:
+        raise RuntimeError("qwen-tts runtime dependencies are not installed") from exc
+
+    device_map = _device_map(torch)
+    kwargs: dict[str, object] = {"device_map": device_map}
+    dtype = _torch_dtype(torch, device_map)
+    if dtype is not None:
+        kwargs["dtype"] = dtype
+    attn = os.getenv("JARVIS_TTS_RUNTIME_ATTN", "").strip()
+    if attn:
+        kwargs["attn_implementation"] = attn
+
+    model_path = _prepare_model_path(model_id, snapshot_download)
+    _loaded_model = LoadedModel(model_id=model_id, model=Qwen3TTSModel.from_pretrained(model_path, **kwargs))
+    return _loaded_model.model
 
 
 def _prepare_model_path(model_id: str, snapshot_download: object) -> str:
