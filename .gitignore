@@ -5,3 +5,10 @@ data/
 *.pyc
 __pycache__/
 CODEX_WORK.md
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# graphify knowledge-graph outputs (regeneratable)
+graphify-out/
