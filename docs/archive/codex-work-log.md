@@ -1,4 +1,11 @@
-# JARVIS Current State
+> **보관됨 (ARCHIVED)** — 이 문서는 특정 시점(auth/signup 정리, 토큰 서명 전환,
+> PostgreSQL 데드락 수정, model-config API 추가 작업 당시)의 작업 기록입니다.
+> 여기 적힌 내용은 모두 반영되어 현재 코드베이스에 존재합니다. "Current State"라는
+> 제목과 달리 지금은 히스토리 자료입니다 — 현재 상태는 저장소 루트의
+> `DEV_READINESS_REVIEW.md`를 보세요. `jarvis_core/docs/architecture.md` /
+> `jarvis_core/docs/runbook.md`도 이 문서보다 최신입니다.
+
+# JARVIS Current State (작업 기록, 완료됨)
 
 ## Architecture
 

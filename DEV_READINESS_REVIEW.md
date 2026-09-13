@@ -134,3 +134,80 @@ README 자체 TODO에 명시. "에이전트가 실제로 컴퓨터를 조작한�
 | E. realtime/deep 라우팅 스텁 | ⏸ 보류 | README 자체가 "library-first placeholder"로 명시한 의도적 미완성 상태. 어떤 기준으로 "실시간 vs deep"을 가를지(모델 기반 분류? 더 정교한 휴리스틱?)는 제품 설계 결정 — 임의로 구현하면 스펙 없는 추측성 로직이 됨 |
 
 전 항목 수정 후 controller(198 pass / 15 fail, 전부 기존 환경 의존 실패), core(43 pass / 6 fail, 전부 기존 환경 의존 실패), gateway(8/8), workbench(6/6) 전부 재확인 — **새로 생긴 회귀 없음**. 아직 커밋은 하지 않음.
+
+## 7. 이후 진행 사항 (같은 세션, 6번 이후)
+
+6번 이후 모든 변경사항은 각 레포 `main`에 커밋 + push 완료됨 (커밋 목록은 각
+레포 `git log` 참고).
+
+### 7.1 클라이언트(userspace) 액션 커버리지 감사 및 게임 컨트롤 확장
+- `browser_control`에 빠져있던 6개 커맨드 구현: `scroll`, `new_tab`, `new_window`,
+  `close_tab`, `focus_address_bar`, `search`
+- `mouse_move`, `mouse_scroll` 신규 액션 타입 추가, `mouse_click`/`mouse_drag`에
+  `button`(좌/우/중) 지원 추가 — 기존엔 AppleScript 한계로 우클릭이 아예 안 됐음
+- `hotkey`에 `duration_seconds`(홀드) 지원 — WASD 같은 이동키 홀드 조작용
+- `file_manage`(mkdir/move/delete), `system_info`(프로세스/앱 목록), `key_press`,
+  `mouse.position` — userspace(클라이언트)엔 이미 구현돼 있었지만
+  `jarvis_contracts`에 등록이 안 돼 있어서 AI가 대화 중에 못 쓰던 "숨겨진 기능"들을
+  등록해서 실제로 쓸 수 있게 함
+- 위 작업 중 userspace 쪽 upstream(다른 세션의 동시 작업)과 충돌 발생 —
+  `dispatcher.py`/`physical_input.py`/`setup.py`/`config.py` 4개 파일 수동 병합
+
+### 7.2 실시간 화면 스트리밍 + 로컬 vision 모델 연동
+- `screen_stream` 액션(`start`/`stop`/`describe`) — 클라이언트가 화면을 주기적으로
+  캡처해 `POST /client/vision/frame`으로 전송, 컨트롤러가 유저별 최신 프레임 1장을
+  캐싱
+- `describe`는 서버에서 바로 처리(클라이언트 왕복 없음) — 캐싱된 프레임을
+  `jarvis_core`의 로컬 vision 모델(`ai/vision.py`, Ollama `qwen2.5vl:3b` 기본값,
+  클라우드 API 미사용)에 넣어 텍스트 설명을 받아옴
+- deepthink 실행 프롬프트가 원래 "스크린샷 찍으면 다음 단계에서 좌표 분석에 씀"이라고
+  되어 있었는데, 실제 모델은 텍스트 전용이라 이미지를 볼 수 없었음 — `screen_stream
+  describe`(텍스트 결과)로 바꿔서 실제로 "보고 판단"이 가능해짐
+
+### 7.3 자율 관찰-행동 루프 (자율 루프)
+- `POST /deepthink/watch` — 목표 하나를 주면 "관찰(describe) → 다음 액션 결정 →
+  실행 → 결과를 컨텍스트에 누적 → 반복"을 SSE로 스트리밍. 더 할 게 없거나(`notify`
+  액션으로 결과 보고), 최대 반복/시간 초과, 취소 시 종료
+- `POST /deepthink/watch/start` — 같은 루프를 백그라운드 스레드에서 돌려서 HTTP
+  연결을 안 붙잡아둠. 액션은 기존 `ActionDispatcher` 큐로, "다 됐다" 신호는 기존
+  `notify` 액션으로 — 새 전송 구조나 새 액션 타입 없이 기존 인프라 재사용
+- `autonomous_intent.py` — "계속 지켜보면서", "watch and keep playing until" 같은
+  좁은 문구만 감지해서 대화 중 자동으로 백그라운드 루프 트리거. `router.py`의 기존
+  5,000줄 로직은 건드리지 않고 진입점 한 곳에만 연결
+- 조사 중 발견: `jarvis_core`의 웹소켓 기반 `run_realtime`은 실제로 **어디서도
+  호출되지 않는 죽은 코드**였음 — 실제 대화 경로는 전부 HTTP 요청/응답 + SSE.
+  덕분에 웹소켓 루프를 안 건드리고도 백그라운드 실행이 가능했음
+- 구현 중 버그 하나 발견·수정: 백그라운드 루프 취소를 기존
+  `TurnCancellationStore`(유저당 활성 턴 1개, barge-in용)에 등록했더니 자기를
+  트리거한 대화 턴 자체를 취소시키는 부작용이 있었음 — 독립된 취소 플래그로 분리
+
+### 7.4 router.py 유지보수성 (부분 진행)
+- `browser_control` 관련 헬퍼는 그대로 두고, todo 의도탐지 로직 분리(6번에서 이미
+  진행)에 이어 `autonomous_intent.py`처럼 새 기능은 처음부터 별도 파일로 분리하는
+  패턴을 유지 중
+
+### 7.5 `.gitignore` 정리
+- `jarvis_contracts/.gitignore`를 다른 서비스들과 같은 수준으로 보강(`.venv/`,
+  캐시, `*.egg-info/` 등 누락돼 있었음)
+- `jarvis_gateway/.gitignore`에 `.env` 추가
+- `jarvis_ai_workbench/uv.lock` 트래킹 시작 (controller/core는 이미 트래킹 중이던
+  것과 통일)
+- 루트 `.gitignore`에 `*.egg-info/`, 캐시 디렉토리들, `graphify-out/`(재생성 가능한
+  산출물) 추가
+
+### 7.6 문서 정리 (이번 항목)
+- `CODEx.md`, `jarvis_core/CORE_INTEGRATION_TASK.md` → `docs/archive/`로 이동 (전부
+  완료된 작업의 기록, "현재 상태"라는 제목이 오해를 줘서 보관 배너 추가)
+- `REFACTORING_PLAN.md` — Phase 1·2 완료 확인, Phase 3은 `core_bridge.py` 삭제
+  1건만 남음(죽은 코드, 어디서도 import 안 됨 — 삭제 안전), Phase 4(gateway
+  `LoginRequest`/`LoginResponse` 중복 제거)는 미착수 확인. 각 표에 상태 표시
+
+### 남은 것 (다음에 볼 것)
+- `jarvis_controller/src/middleware/core_bridge.py` 삭제 (죽은 코드 확인됨)
+- `jarvis_gateway/src/jarvis_gateway/models.py`의 `LoginRequest`/`LoginResponse`를
+  `jarvis_contracts`에서 import하도록 변경 (REFACTORING_PLAN Phase 4)
+- 캘린더 일정 생성/수정/삭제 — provider 미연동 (Google Calendar API? Apple
+  EventKit?) 상태로 여전히 남아있음
+- 대화창 말풍선+TTS로 말하는 `assistant_message` 액션 — 선제적 상호작용을 OS
+  알림(`notify`)이 아니라 실제 음성으로 하려면 필요. Electron/React UI 쪽이라 직접
+  실행 검증 불가능해서 보류 중

@@ -1,5 +1,9 @@
 # JARVIS 리팩토링 계획
 
+> **진행 상태 (2026-09-13 재확인)**: Phase 1·2·3은 완료 확인됨. Phase 4(gateway
+> 모델 중복 제거)와 Phase 3의 `core_bridge.py` 삭제만 남음 — 아래 각 표에 ✅/⬜
+> 표시. 남은 두 항목만 처리하면 이 문서는 완전히 닫힌다.
+
 ## 현재 문제 진단
 
 ### 1. contracts: 모델 중복
@@ -24,7 +28,7 @@
 
 ## 리팩토링 Phase 구성
 
-### Phase 1: contracts 정리
+### Phase 1: contracts 정리 ✅ 완료
 **목표**: 단일 소스(single source of truth) 확립
 
 | 작업 | 상세 |
@@ -39,7 +43,7 @@
 - `jarvis_contracts/__init__.py` — 전체 export 정리
 - `jarvis_contracts/endpoints.py` — gateway endpoints 추가
 
-### Phase 2: core 정리
+### Phase 2: core 정리 ✅ 완료
 **목표**: core는 DB + AI 프로바이더 관리만 담당
 
 | 작업 | 상세 |
@@ -66,15 +70,15 @@ src/
         └── schemas.py        # 내부 스키마 (유지 또는 contracts 이동)
 ```
 
-### Phase 3: controller 강화
+### Phase 3: controller 강화 ⬜ 거의 완료 (1개 항목 남음)
 **목표**: 모든 사용자 대면 엔드포인트를 controller로 집중
 
-| 작업 | 상세 |
-|------|------|
-| `core_bridge.py` 삭제 | sys.path 해킹 제거 |
-| core HTTP client 확장 | `core_client.py`에 chat 관련 메서드 추가 (request_once, stream, model-config 등) |
-| chat 엔드포인트 추가 | controller router에 `/chat/*` 엔드포인트 추가 → core internal API 호출 |
-| 스트리밍 프록시 | SSE/WebSocket 엔드포인트를 controller에 추가, core의 스트리밍을 프록시 |
+| 작업 | 상세 | 상태 |
+|------|------|------|
+| `core_bridge.py` 삭제 | sys.path 해킹 제거 | ⬜ 파일은 아직 있음 — 확인 결과 어디서도 import 안 됨(죽은 코드), 삭제해도 안전 |
+| core HTTP client 확장 | `core_client.py`에 chat 관련 메서드 추가 (request_once, stream, model-config 등) | ✅ 완료 |
+| chat 엔드포인트 추가 | controller router에 `/chat/*` 엔드포인트 추가 → core internal API 호출 | ✅ 완료 (14개 `/chat/*` 라우트 확인) |
+| 스트리밍 프록시 | SSE/WebSocket 엔드포인트를 controller에 추가, core의 스트리밍을 프록시 | ✅ 완료 (`/conversation/stream`, `/chat/stream`) |
 
 **controller의 최종 구조**:
 ```
@@ -89,13 +93,13 @@ src/
 └── planner/                  # (유지)
 ```
 
-### Phase 4: gateway 정리
+### Phase 4: gateway 정리 ⬜ 미완료
 **목표**: contracts 모델 사용으로 통일
 
-| 작업 | 상세 |
-|------|------|
-| 중복 모델 제거 | gateway `models.py`에서 contracts와 겹치는 모델 제거, contracts에서 import |
-| endpoint 상수 사용 | contracts의 `JarvisGatewayEndpoints`를 gateway/controller에서 활용 |
+| 작업 | 상세 | 상태 |
+|------|------|------|
+| 중복 모델 제거 | gateway `models.py`에서 contracts와 겹치는 모델 제거, contracts에서 import | ⬜ `LoginRequest`/`LoginResponse`가 `jarvis_gateway/models.py`와 `jarvis_contracts/conversation_models.py`에 여전히 중복 정의됨 |
+| endpoint 상수 사용 | contracts의 `JarvisGatewayEndpoints`를 gateway/controller에서 활용 | ⬜ 미확인 — `jarvis_contracts/endpoints.py`에 gateway용 엔드포인트 상수가 있는지 재확인 필요 |
 
 ---
 
